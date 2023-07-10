@@ -1,12 +1,13 @@
+import logging
 import time
-from mindsdb.utilities import log
 
-from mindsdb.utilities.log import initialize_log
-
-from mindsdb.utilities.config import Config
-from mindsdb.interfaces.storage import db
 from mindsdb.interfaces.chatbot.chatbot_thread import ChatBotThread
 from mindsdb.interfaces.chatbot.realtime_chatbot_thread import RealtimeChatBotThread
+from mindsdb.interfaces.storage import db
+from mindsdb.utilities import log
+from mindsdb.utilities.config import Config
+
+logger = {}
 
 
 class ChatBotMonitor:
@@ -21,7 +22,6 @@ class ChatBotMonitor:
         """Starts monitoring chatbots periodically based on database configuration."""
         config = Config()
         db.init()
-        initialize_log(config, 'jobs', wrap_print=True)
         self.config = config
 
         while True:
@@ -32,7 +32,7 @@ class ChatBotMonitor:
                 self.stop_all_bots()
                 raise
             except Exception as e:
-                log.logger.error(e)
+                logger.error(e)
 
             db.session.rollback()  # disable cache
             time.sleep(ChatBotMonitor._MONITOR_INTERVAL_SECONDS)
@@ -65,9 +65,7 @@ class ChatBotMonitor:
         # Check old bots to stop
         active_bots = list(self._active_bots.keys())
         for bot_id in active_bots:
-            bot = db.ChatBots.query.filter(
-                db.ChatBots.id == bot_id
-            ).first()
+            bot = db.ChatBots.query.filter(db.ChatBots.id == bot_id).first()
             is_running = bot is not None and bot.is_running
             if bot_id not in allowed_bots or not is_running:
                 self.stop_bot(bot_id)
@@ -85,7 +83,11 @@ class ChatBotMonitor:
 
 def start(verbose=False):
     """Creates a new ChatBotMonitor based on MindsDB config and starts monitoring chatbots."""
-    is_cloud = Config().get('cloud', False)
+    log.configure_logging()  # Because this is the entrypoint for a process, we need to config logging
+    global logger
+    logger = logging.getLogger(__name__)
+    logger.info("ChatBot API is starting..")
+    is_cloud = Config().get("cloud", False)
     if is_cloud is True:
         # Chatbots are disabled on cloud
         # TODO(tmichaeldb): Remove for public Chatbots release.
@@ -95,5 +97,5 @@ def start(verbose=False):
     monitor.start()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     start()
